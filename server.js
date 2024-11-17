@@ -5,9 +5,53 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+import { google } from 'googleapis';
+import { JWT } from 'google-auth-library';
+
+// Cargar variables de entorno
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Configurar autenticación de Google
+const auth = new JWT({
+    email: process.env.GOOGLE_CLIENT_EMAIL,
+    key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets']
+});
+
+const sheets = google.sheets({ version: 'v4', auth });
+const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
+
+// Función para ordenar el Sheet
+async function ordenarSheet() {
+    try {
+        await sheets.spreadsheets.batchUpdate({
+            spreadsheetId: SPREADSHEET_ID,
+            resource: {
+                requests: [{
+                    sortRange: {
+                        range: {
+                            sheetId: 0,  // ID de la primera hoja
+                            startRowIndex: 1,  // Empezar después del encabezado
+                            startColumnIndex: 0,  // Columna A
+                            endColumnIndex: 1  // Solo columna A
+                        },
+                        sortSpecs: [{
+                            dimensionIndex: 0,  // Columna A
+                            sortOrder: 'ASCENDING'
+                        }]
+                    }
+                }]
+            }
+        });
+        console.log('Sheet ordenado exitosamente');
+    } catch (error) {
+        console.error('Error al ordenar sheet:', error);
+    }
+}
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -35,21 +79,10 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         const worksheet = workbook.Sheets['Reporte'];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 'A', range: 5});
 
-        // Lista de unidades destino permitidas
-        const unidadesPermitidas = [
-            'LB', 'KG', '8G', '3G', 'S100G', 'S.10M', 'S1M', '10G', 
-            '1G', '5G', '25G', '6G', '2G', '0.5G', 'SEM'
-        ];
-
         const processedData = jsonData
             .map(row => {
                 const unidadDestino = row['K']?.toString().trim().split(/\s+/).pop();
                 
-                // Solo procesar si la unidadDestino está en la lista de permitidas
-                if (!unidadesPermitidas.includes(unidadDestino?.toUpperCase())) {
-                    return null;
-                }
-
                 return {
                     nombre: row['K'],
                     valor: row['L'],
@@ -73,6 +106,9 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         if (!webhookResponse.ok) {
             throw new Error('Error al enviar los datos al webhook');
         }
+
+        // Programar ordenamiento después de 10 segundos
+        setTimeout(ordenarSheet, 10000);
 
         res.json({ message: 'Archivo procesado y enviado correctamente' });
     } catch (error) {
@@ -103,51 +139,31 @@ app.post('/upload-ventas', upload.single('file'), async (req, res) => {
         const processedData = jsonData
             .map(row => {
                 const palabraT = row['T']?.toString().trim().split(/\s+/).pop() || '';
-                console.log('Fila original:', {
-                    R: row['R'],
-                    T: row['T'],
-                    U: row['U'],
-                    AA: row['AA']
-                });
-                console.log('Última palabra de T:', palabraT);
                 
                 // Determinar unidadOrigen
                 let unidadOrigen;
                 if (palabraT.toUpperCase().startsWith('SB')) {
-                    // Si la palabra empieza con SB, SIEMPRE tomamos la última palabra de U
                     unidadOrigen = row['U']?.toString().trim().split(/\s+/).pop() || '';
-                    console.log('Palabra empieza con SB, tomando de U:', unidadOrigen);
                 } else {
-                    // Si no empieza con SB, usamos la última palabra de T
                     unidadOrigen = palabraT;
-                    console.log('Palabra no empieza con SB, usando T:', unidadOrigen);
                 }
 
                 const unidadDestino = row['R']?.toString().trim().split(/\s+/).pop();
                 
-                console.log('Unidades procesadas:', {
-                    unidadOrigen,
-                    unidadDestino
-                });
-
-                // Solo procesar si la unidadDestino está en la lista de permitidas
                 if (!unidadesPermitidas.includes(unidadDestino?.toUpperCase())) {
-                    console.log('Unidad destino no permitida:', unidadDestino);
                     return null;
                 }
 
-                const result = {
+                return {
                     nombre: row['R'],
                     unidadOrigen: unidadOrigen?.toUpperCase(),
                     unidadDestino: unidadDestino?.toUpperCase(),
                     valorOrigen: row['AA']
                 };
-                console.log('Objeto procesado:', result);
-                return result;
             })
             .filter(row => row !== null && (row.nombre || row.valorOrigen));
 
-        // Enviar al webhook de ventas (nueva URL)
+        // Enviar al webhook
         const webhookResponse = await fetch('https://workflows.ops.sandbox.cuentamono.com/webhook/6fbe03da-7a3b-416a-a107-a77f3fd649d3', {
             method: 'POST',
             headers: {
@@ -159,6 +175,9 @@ app.post('/upload-ventas', upload.single('file'), async (req, res) => {
         if (!webhookResponse.ok) {
             throw new Error('Error al enviar los datos al webhook de ventas');
         }
+
+        // Programar ordenamiento después de 10 segundos
+        setTimeout(ordenarSheet, 10000);
 
         res.json({ message: 'Archivo de ventas procesado y enviado correctamente' });
     } catch (error) {
