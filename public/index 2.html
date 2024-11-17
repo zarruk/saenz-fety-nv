@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subir Archivo</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <form class="upload-form" id="uploadForm">
+            <h2>Subir Archivo</h2>
+            <div class="file-input-container">
+                <input type="file" id="fileInput" class="file-input" accept=".xls,.xlsx">
+                <label for="fileInput" class="file-label">
+                    Seleccionar archivo Excel
+                </label>
+                <span id="fileName" class="file-name">Ningún archivo seleccionado</span>
+            </div>
+            <button type="submit" class="submit-button">Procesar</button>
+            <div id="message" class="message"></div>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name || 'Ningún archivo seleccionado';
+            document.getElementById('fileName').textContent = fileName;
+        });
+
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const file = document.getElementById('fileInput').files[0];
+            const messageDiv = document.getElementById('message');
+            
+            if (!file) {
+                messageDiv.textContent = 'Por favor selecciona un archivo';
+                messageDiv.className = 'message error';
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('http://localhost:3000/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    messageDiv.textContent = data.message;
+                    messageDiv.className = 'message success';
+                } else {
+                    messageDiv.textContent = data.error;
+                    messageDiv.className = 'message error';
+                }
+            } catch (error) {
+                messageDiv.textContent = 'Error al procesar el archivo: ' + error.message;
+                messageDiv.className = 'message error';
+            }
+        });
+    </script>
+</body>
+</html> 

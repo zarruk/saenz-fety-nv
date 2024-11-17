@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procesador de Archivos - Saenz Fety</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <img src="https://saenzfety.com/wp-content/uploads/2024/09/10_4_23_SAENZ-FETY_LOGO_ALTA_2.jpg-scaled.webp" 
+             alt="Saenz Fety Logo" 
+             class="main-logo">
+             
+        <div class="tabs">
+            <button class="tab-button active" data-tab="inventario">Archivo de Inventario</button>
+            <button class="tab-button" data-tab="ventas">Archivo de Ventas</button>
+        </div>
+
+        <div class="forms-container">
+            <!-- Formulario de Inventario -->
+            <form class="upload-form active" id="inventarioForm" data-form="inventario">
+                <div class="drop-zone" id="dropZoneInventario">
+                    <input type="file" id="fileInputInventario" class="file-input" accept=".xls,.xlsx">
+                    <div class="drop-zone-content">
+                        <svg class="upload-icon" viewBox="0 0 24 24">
+                            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                        </svg>
+                        <p>Arrastra tu archivo de inventario aquí o</p>
+                        <button type="button" class="select-button">Selecciona un archivo</button>
+                        <p class="file-info" id="fileNameInventario">Ningún archivo seleccionado</p>
+                    </div>
+                </div>
+                <button type="submit" class="submit-button" disabled>Procesar Archivo de Inventario</button>
+                <div class="message"></div>
+            </form>
+
+            <!-- Formulario de Ventas -->
+            <form class="upload-form" id="ventasForm" data-form="ventas">
+                <div class="drop-zone" id="dropZoneVentas">
+                    <input type="file" id="fileInputVentas" class="file-input" accept=".xls,.xlsx">
+                    <div class="drop-zone-content">
+                        <svg class="upload-icon" viewBox="0 0 24 24">
+                            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                        </svg>
+                        <p>Arrastra tu archivo de ventas aquí o</p>
+                        <button type="button" class="select-button">Selecciona un archivo</button>
+                        <p class="file-info" id="fileNameVentas">Ningún archivo seleccionado</p>
+                    </div>
+                </div>
+                <button type="submit" class="submit-button" disabled>Procesar Archivo de Ventas</button>
+                <div class="message"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Manejo de tabs
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                // Actualizar botones
+                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                
+                // Actualizar formularios
+                const formType = button.dataset.tab;
+                document.querySelectorAll('.upload-form').forEach(form => {
+                    form.classList.remove('active');
+                    if (form.dataset.form === formType) {
+                        form.classList.add('active');
+                    }
+                });
+            });
+        });
+
+        // Función para configurar el manejo de archivos
+        function setupFileHandling(formId, dropZoneId, fileInputId, fileNameId) {
+            const form = document.getElementById(formId);
+            const dropZone = document.getElementById(dropZoneId);
+            const fileInput = document.getElementById(fileInputId);
+            const fileName = document.getElementById(fileNameId);
+            const submitButton = form.querySelector('.submit-button');
+            const messageDiv = form.querySelector('.message');
+
+            function handleFile(file) {
+                if (file) {
+                    fileName.textContent = file.name;
+                    submitButton.disabled = false;
+                    dropZone.classList.add('has-file');
+                } else {
+                    fileName.textContent = 'Ningún archivo seleccionado';
+                    submitButton.disabled = true;
+                    dropZone.classList.remove('has-file');
+                }
+            }
+
+            // Event listeners para drag and drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                const file = e.dataTransfer.files[0];
+                fileInput.files = e.dataTransfer.files;
+                handleFile(file);
+            });
+
+            // Click en el botón de selección
+            dropZone.querySelector('.select-button').addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                handleFile(e.target.files[0]);
+            });
+
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const file = fileInput.files[0];
+                
+                if (!file) {
+                    showMessage(messageDiv, 'Por favor selecciona un archivo', 'error');
+                    return;
+                }
+
+                submitButton.disabled = true;
+                submitButton.textContent = 'Procesando...';
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const endpoint = formId === 'inventarioForm' ? '/upload' : '/upload-ventas';
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        showMessage(messageDiv, data.message, 'success');
+                    } else {
+                        throw new Error(data.error);
+                    }
+                } catch (error) {
+                    showMessage(messageDiv, error.message, 'error');
+                } finally {
+                    submitButton.disabled = false;
+                    submitButton.textContent = formId === 'inventarioForm' 
+                        ? 'Procesar Archivo de Inventario' 
+                        : 'Procesar Archivo de Ventas';
+                }
+            });
+        }
+
+        function showMessage(messageDiv, text, type) {
+            messageDiv.textContent = text;
+            messageDiv.className = `message ${type}`;
+            setTimeout(() => {
+                messageDiv.classList.add('show');
+            }, 10);
+        }
+
+        // Configurar manejo de archivos para ambos formularios
+        setupFileHandling('inventarioForm', 'dropZoneInventario', 'fileInputInventario', 'fileNameInventario');
+        setupFileHandling('ventasForm', 'dropZoneVentas', 'fileInputVentas', 'fileNameVentas');
+    </script>
+</body>
+</html> 
