@@ -88,14 +88,14 @@ app.post('/upload-ventas', upload.single('file'), async (req, res) => {
 
         const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
         
-        if (workbook.SheetNames.length < 2) {
+        if (!workbook.SheetNames.includes('Hoja2')) {
             return res.status(400).json({ 
-                error: 'Este archivo no contiene la hoja de ventas requerida' 
+                error: 'Este archivo no contiene la hoja de ventas requerida (Hoja2)' 
             });
         }
 
-        const worksheet = workbook.Sheets[workbook.SheetNames[1]]; // Hoja 2
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 'A', range: 4}); // Comenzar desde la fila 5
+        const worksheet = workbook.Sheets['Hoja2'];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 'A', range: 4});
 
         // Lista de unidades destino permitidas para ventas
         const unidadesPermitidas = ['LB', 'KG', 'GR', 'SEM'];
@@ -113,8 +113,13 @@ app.post('/upload-ventas', upload.single('file'), async (req, res) => {
                 
                 // Determinar unidadOrigen
                 let unidadOrigen;
-                if (palabraT.toUpperCase().startsWith('SB')) {
-                    // Si la palabra empieza con SB, SIEMPRE tomamos la última palabra de U
+                
+                // Nueva validación para SBIN
+                if (palabraT.toUpperCase() === 'SBIN') {
+                    unidadOrigen = '1G';
+                    console.log('Palabra es SBIN, asignando unidad:', unidadOrigen);
+                } else if (palabraT.toUpperCase().startsWith('SB')) {
+                    // Si la palabra empieza con SB (pero no es SBIN), tomamos la última palabra de U
                     unidadOrigen = row['U']?.toString().trim().split(/\s+/).pop() || '';
                     console.log('Palabra empieza con SB, tomando de U:', unidadOrigen);
                 } else {
@@ -148,7 +153,7 @@ app.post('/upload-ventas', upload.single('file'), async (req, res) => {
             .filter(row => row !== null && (row.nombre || row.valorOrigen));
 
         // Enviar al webhook de ventas (nueva URL)
-        const webhookResponse = await fetch('https://workflows.ops.sandbox.cuentamono.com/webhook/6fbe03da-7a3b-416a-a107-a77f3fd649d3', {
+        const webhookResponse = await fetch('https://workflows.ops.sandbox.cuentamono.com/webhook/b110575b-dfca-466a-9042-1c6539c6c4b8', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -166,7 +171,7 @@ app.post('/upload-ventas', upload.single('file'), async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3000;
 try {
     app.listen(PORT, () => {
         console.log('=================================');
